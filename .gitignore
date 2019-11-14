@@ -1,6 +1,7 @@
 *.pyc
 *.swp
 .cache
+__pycache__
 MANIFEST
 build
 dist

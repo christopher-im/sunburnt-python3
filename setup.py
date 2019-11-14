@@ -1,24 +1,29 @@
 #!/usr/bin/env python
 
-import distutils.core, os, re
+import os
+import re
+import distutils.core
+import setuptools
 
-version_number_re = "\s*__version__\s*=\s*((\"([^\"]|\\\\\")*\"|'([^']|\\\\')*'))"
+version_number_re = re.compile(r"\s*__version__\s*=\s*((\"([^\"]|\\\\\")*\"|'([^']|\\\\')*'))")
 version_file = os.path.join(os.path.dirname(__file__), 'sunburnt', '__init__.py')
 version_number = re.search(version_number_re, open(version_file).read()).groups()[0][1:-1]
 
-distutils.core.setup(
-    name='sunburnt',
-    version=version_number,
-    description='Python interface to Solr',
-    author='Toby White',
-    author_email='toby@timetric.com',
-    packages=['sunburnt'],
-    requires=['lxml', 'pytz'],
-    classifiers=[
-        'Development Status :: 4 - Beta',
-        'Intended Audience :: Developers',
-        'License :: OSI Approved :: MIT License',
-        'Programming Language :: Python',
-        'Topic :: Internet :: WWW/HTTP :: Indexing/Search',
-        'Topic :: Software Development :: Libraries'],
-    )
+with open("README.rst", "r") as fh:
+    long_description = fh.read()
+
+distutils.core.setup(name='sunburnt-python3',
+                     version=version_number,
+                     description='Python interface to Solr',
+                     long_description=long_description,
+                     author='Chris Murray',
+                     author_email='chris@chrismurray.scot',
+                     url='https://github.com/christopher-im/sunburnt-python3',
+                     packages=setuptools.find_packages(),
+                     requires=['lxml', 'pytz', 'requests'],
+                     classifiers=[
+                         'Development Status :: 4 - Beta', 'Programming Language :: Python :: 3', 'Intended Audience :: Developers',
+                         'License :: OSI Approved :: MIT License', 'Programming Language :: Python',
+                         'Topic :: Internet :: WWW/HTTP :: Indexing/Search', 'Topic :: Software Development :: Libraries'
+                     ],
+                     keywords='solr')
