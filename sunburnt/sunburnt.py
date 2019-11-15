@@ -25,6 +25,8 @@ class SolrConnection():
 
     def __init__(self, url, http_connection, mode, retry_timeout, max_length_get_url, format):
         self.http_connection = http_connection
+        if not self.http_connection:
+            self.http_connection = requests.Session()
         if mode == 'r':
             self.writeable = False
         elif mode == 'w':
@@ -114,7 +116,6 @@ class SolrConnection():
         return self.update_url
 
     def select(self, params):
-        print(params)
         if not self.readable:
             raise TypeError("This Solr instance is only for writing")
         if self.format == 'json':
@@ -129,9 +130,7 @@ class SolrConnection():
         else:
             method = 'GET'
             kwargs = {}
-        print(url)
         response = self.request(method, url, **kwargs)
-        print(response.content)
         if response.status_code != 200:
             raise SolrError(response)
         return response.content
@@ -188,7 +187,6 @@ class SolrInterface():
         # return remote file as StringIO and cache the contents
         if filename not in self.file_cache:
             response = self.conn.request('GET', self.make_file_url(filename))
-            print(response)
             if response.status_code == 200:
                 self.file_cache[filename] = response.content
             elif response.status_code == 404:
@@ -196,7 +194,11 @@ class SolrInterface():
             else:
                 raise EnvironmentError("Couldn't retrieve schema document from server - received status code %s\n%s" %
                                        (response.status_code, response.content))
-        return io.BytesIO(self.file_cache[filename].encode('utf8'))
+        try:
+            file_string = self.file_cache[filename].encode('utf8')
+        except AttributeError:
+            file_string = self.file_cache[filename]
+        return io.BytesIO(file_string)
 
     def save_file_cache(self, dirname):
         # take the file cache and save to a directory
@@ -288,10 +290,7 @@ class SolrInterface():
         self.delete(queries=self.Q(**{"*": "*"}))
 
     def search(self, **kwargs):
-        print(kwargs)
         params = params_from_dict(**kwargs)
-        print('***************')
-        print(params)
         return self.schema.parse_response(self.conn.select(params))
 
     def query(self, *args, **kwargs):

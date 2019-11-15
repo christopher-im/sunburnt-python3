@@ -19,7 +19,7 @@ distutils.core.setup(name='sunburnt-python3',
                      author='Chris Murray',
                      author_email='chris@chrismurray.scot',
                      url='https://github.com/christopher-im/sunburnt-python3',
-                     packages=setuptools.find_packages(),
+                     packages=setuptools.find_packages(exclude=["*.tests", "*.tests.*", "tests.*", "tests"]),
                      requires=['lxml', 'pytz', 'requests'],
                      licence='MIT',
                      classifiers=[
