@@ -65,9 +65,9 @@ parameters.
   solr.RandomSortField      str (default handling)
   solr.UUIDField            uuid.UUID
   solr.BinaryField          unicode (base64 decoded)
-  solr.PointType            solr_point (1 dimension)
-  solr.LatLonType           solr_point (2 dimensions)
-  solr.GeoHashField         solr_point (2 dimensions)
+  solr.PointType            SolrPoint (1 dimension)
+  solr.LatLonType           SolrPoint (2 dimensions)
+  solr.GeoHashField         SolrPoint (2 dimensions)
   ========================  =========== 
 
   If you are using a custom field type that Sunburnt does not

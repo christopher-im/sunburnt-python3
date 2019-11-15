@@ -1,11 +1,17 @@
 from os import path
-from lxml import etree
 import io
 from itertools import islice
-import shutil, tempfile, time, urllib.request, urllib.parse, urllib.error, urllib.parse
+import shutil
+import tempfile
+import time
+import urllib.request
+import urllib.parse
+import urllib.error
 import warnings
 
-from .http import ConnectionError, wrap_http_connection
+from lxml import etree
+import requests
+
 from .schema import SolrSchema, SolrError
 from .search import LuceneQuery, MltSolrSearch, SolrSearch, params_from_dict
 
@@ -13,12 +19,12 @@ MAX_LENGTH_GET_URL = 2048
 # Jetty default is 4096; Tomcat default is 8192; picking 2048 to be conservative.
 
 
-class SolrConnection(object):
+class SolrConnection():
     readable = True
     writeable = True
 
     def __init__(self, url, http_connection, mode, retry_timeout, max_length_get_url, format):
-        self.http_connection = wrap_http_connection(http_connection)
+        self.http_connection = http_connection
         if mode == 'r':
             self.writeable = False
         elif mode == 'w':
@@ -34,7 +40,7 @@ class SolrConnection(object):
     def request(self, *args, **kwargs):
         try:
             return self.http_connection.request(*args, **kwargs)
-        except ConnectionError:
+        except requests.exceptions.ConnectionError:
             if self.retry_timeout < 0:
                 raise
             time.sleep(self.retry_timeout)
@@ -105,8 +111,7 @@ class SolrConnection(object):
             raise ValueError("Can't do maxSegments without optimize")
         if extra_params:
             return "%s?%s" % (self.update_url, urllib.parse.urlencode(sorted(extra_params.items())))
-        else:
-            return self.update_url
+        return self.update_url
 
     def select(self, params):
         print(params)
@@ -157,7 +162,7 @@ class SolrConnection(object):
         return response.content
 
 
-class SolrInterface(object):
+class SolrInterface():
 
     def __init__(self,
                  url,
@@ -183,6 +188,7 @@ class SolrInterface(object):
         # return remote file as StringIO and cache the contents
         if filename not in self.file_cache:
             response = self.conn.request('GET', self.make_file_url(filename))
+            print(response)
             if response.status_code == 200:
                 self.file_cache[filename] = response.content
             elif response.status_code == 404:
@@ -202,9 +208,8 @@ class SolrInterface(object):
         file_contents = self.get_file(filename)
         if file_contents is None:
             return None
-        else:
-            tree = etree.parse(self.get_file(filename))
-            return tree.getroot().findall('{http://www.w3.org/2001/XInclude}include')
+        tree = etree.parse(self.get_file(filename))
+        return tree.getroot().findall('{http://www.w3.org/2001/XInclude}include')
 
     def get_file_and_included_files(self, filename):
         # return a list containing this file, and all files this file includes
@@ -264,7 +269,7 @@ class SolrInterface(object):
     def delete(self, docs=None, queries=None, **kwargs):
         if not docs and not queries:
             raise SolrError("No docs or query specified for deletion")
-        elif docs is not None and (hasattr(docs, "items") or not isinstance(docs, list)):
+        if docs is not None and (hasattr(docs, "items") or not isinstance(docs, list)):
             docs = [docs]
         delete_message = self.schema.make_delete(docs, queries)
         self.conn.update(str(delete_message), **kwargs)
@@ -293,8 +298,7 @@ class SolrInterface(object):
         q = SolrSearch(self)
         if len(args) + len(kwargs) > 0:
             return q.query(*args, **kwargs)
-        else:
-            return q
+        return q
 
     def mlt_search(self, content=None, **kwargs):
         params = params_from_dict(**kwargs)

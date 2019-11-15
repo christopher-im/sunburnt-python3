@@ -40,15 +40,17 @@ class WildcardString(SolrString):
 
     def get_wildcards(self, s):
         backslash = False
-        i = 0
         chars = []
         for c in s:
+            print(c)
+            print('backslash is ' + str(backslash))
             if backslash:
+                print('Removing backslash')
                 backslash = False
                 chars.append(c)
                 continue
-            i += 1
             if c == '\\':
+                print('setting backslash')
                 backslash = True
             elif c == '*':
                 chars.append(self.Asterisk())
@@ -56,6 +58,7 @@ class WildcardString(SolrString):
                 chars.append(self.QuestionMark())
             else:
                 chars.append(c)
+        print(backslash)
         if backslash:
             chars.append('\\')
         return chars

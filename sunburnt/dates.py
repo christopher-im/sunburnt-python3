@@ -1,45 +1,24 @@
+import datetime
+import math
+import re
 
-
-import datetime, math, re, warnings
-
-try:
-    import mx.DateTime
-except ImportError:
-    warnings.warn(
-        "mx.DateTime not found, retricted to Python datetime objects",
-        ImportWarning)
-    mx = None
-
-try:
-    import pytz
-    utc = pytz.utc
-except ImportError:
-    warnings.warn(
-        "pytz not found, limited timezone conversion possible",
-        ImportWarning)
-    class UTC(datetime.tzinfo):
-        def utcoffset(self, dt):
-            return datetime.timedelta(0)
-        def tzname(self, dt):
-            return "UTC"
-        def dst(self, dt):
-            return datetime.timedelta(0)
-    utc = UTC()
-
+import pytz
+utc = pytz.utc
 
 year = r'[+/-]?\d+'
 tzd = r'Z|((?P<tzd_sign>[-+])(?P<tzd_hour>\d\d):(?P<tzd_minute>\d\d))'
-extended_iso_template = r'(?P<year>'+year+r""")
+extended_iso_template = r'(?P<year>' + year + r""")
                (-(?P<month>\d\d)
                (-(?P<day>\d\d)
             ([T%s](?P<hour>\d\d)
                 :(?P<minute>\d\d)
                (:(?P<second>\d\d)
                (.(?P<fraction>\d+))?)?
-               ("""+tzd+""")?)?
+               (""" + tzd + """)?)?
                )?)?"""
 extended_iso = extended_iso_template % " "
-extended_iso_re = re.compile('^'+extended_iso+'$', re.X)
+extended_iso_re = re.compile('^' + extended_iso + '$', re.X)
+
 
 def datetime_from_w3_datestring(s):
     """ We need to extend ISO syntax (as permitted by the standard) to allow
@@ -62,9 +41,8 @@ def datetime_from_w3_datestring(s):
         elif d['tzd_sign'] == '-':
             tzd_sign = -1
         try:
-            tz_delta = datetime_delta_factory(tzd_sign*int(d['tzd_hour']),
-                                              tzd_sign*int(d['tzd_minute']))
-        except DateTimeRangeError:
+            tz_delta = datetime_delta_factory(tzd_sign * int(d['tzd_hour']), tzd_sign * int(d['tzd_minute']))
+        except DateTimeRangeError as e:
             raise ValueError(e.args[0])
     else:
         tz_delta = datetime_delta_factory(0, 0)
@@ -80,30 +58,20 @@ def datetime_from_w3_datestring(s):
 
 class DateTimeRangeError(ValueError):
     pass
-    
 
-if mx:
-    def datetime_factory(**kwargs):
-        try:
-            return mx.DateTime.DateTimeFrom(**kwargs)
-        except mx.DateTime.RangeError:
-            raise DateTimeRangeError(e.args[0])
-else:
-    def datetime_factory(**kwargs):
-        kwargs['tzinfo'] = utc
-        second = kwargs.get('second')
-        if second is not None:
-            f, i = math.modf(second)
-            kwargs['second'] = int(i)
-            kwargs['microsecond'] = int(round(f * 1000000))
-        try:
-            return datetime.datetime(**kwargs)
-        except ValueError as e:
-            raise DateTimeRangeError(e.args[0])
 
-if mx:
-    def datetime_delta_factory(hours, minutes):
-        return mx.DateTime.DateTimeDelta(0, hours, minutes)
-else:
-    def datetime_delta_factory(hours, minutes):
-        return datetime.timedelta(hours=hours, minutes=minutes)
+def datetime_factory(**kwargs):
+    kwargs['tzinfo'] = utc
+    second = kwargs.get('second')
+    if second is not None:
+        f, i = math.modf(second)
+        kwargs['second'] = int(i)
+        kwargs['microsecond'] = int(round(f * 1000000))
+    try:
+        return datetime.datetime(**kwargs)
+    except ValueError as e:
+        raise DateTimeRangeError(e.args[0])
+
+
+def datetime_delta_factory(hours, minutes):
+    return datetime.timedelta(hours=hours, minutes=minutes)

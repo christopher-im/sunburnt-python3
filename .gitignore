@@ -7,3 +7,7 @@ build
 dist
 docs/_build
 venv
+.coverage
+xunit-reports
+.scannerwork
+coverage-reports

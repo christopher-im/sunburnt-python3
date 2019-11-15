@@ -761,7 +761,7 @@ When using facet ranges, ``start``, ``end``, and ``gap`` are required arguments.
 The arguments ``hardend``, ``include``, and ``other`` are optional.
 
 The arguments ``start`` and ``end`` must both be the same type, and that type must be
-``int``, ``float``, or ``sunburnt.schema.solr_date``. For numeric types, the ``gap``
+``int``, ``float``, or ``sunburnt.schema.SolrDate``. For numeric types, the ``gap``
 should be the same type as ``start`` and ``end``. For date types, the ``gap`` can be
 a special Solr string, such as "+1YEAR" to indicate that each gap should be 1 year
 wide.
@@ -784,10 +784,10 @@ each range is 1 year, starting from the year 2000 up to the present year.
 
  >>> from datetime import datetime
  >>> from sunburnt import SolrInterface
- >>> from sunburnt.schema import solr_date
+ >>> from sunburnt.schema import SolrDate
  >>> si = SolrInterface('http://some.url:8983/solr/')
  >>> query = si.query('kuznetsov')
- >>> query = query.facet_by_range({'last_modified': {'start': solr_date(datetime(2000,1,1)), 'end': solr_date(datetime.utcnow()): 'gap': "+1YEAR"} })
+ >>> query = query.facet_by_range({'last_modified': {'start': SolrDate(datetime(2000,1,1)), 'end': SolrDate(datetime.utcnow()): 'gap': "+1YEAR"} })
  >>> resp = query[:10]
  >>> resp.facet_counts.facet_ranges
  [('modified_ts',

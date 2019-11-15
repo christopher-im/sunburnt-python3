@@ -21,13 +21,13 @@ class SolrError(Exception):
 
 
 @total_ordering
-class solr_date():
+class SolrDate():
     """This class can be initialized from either native python datetime
     objects and mx.DateTime objects, and will serialize to a format
     appropriate for Solr"""
 
     def __init__(self, v):
-        if isinstance(v, solr_date):
+        if isinstance(v, SolrDate):
             self._dt_obj = v._dt_obj
         elif isinstance(v, str):
             try:
@@ -37,7 +37,7 @@ class solr_date():
         elif hasattr(v, "strftime"):
             self._dt_obj = self.from_date(v)
         else:
-            raise SolrError("Cannot initialize solr_date from %s object" % type(v))
+            raise SolrError("Cannot initialize SolrDate from %s object" % type(v))
 
     @staticmethod
     def from_date(dt_obj):
@@ -52,9 +52,6 @@ class solr_date():
         if hasattr(self._dt_obj, "microsecond"):
             return self._dt_obj.microsecond
         return int(1000000 * math.modf(self._dt_obj.second)[0])
-
-    # def __repr__(self):
-    #     return repr(self._dt_obj)
 
     def __repr__(self):
         """ Serialize a datetime object in the format required
@@ -82,7 +79,7 @@ def solr_point_factory(dimension):
     if int(dimension) < 1:
         raise ValueError("dimension of PointType must be greater than one")
 
-    class solr_point():
+    class SolrPoint():
         dim = int(dimension)
 
         def __init__(self, *args):
@@ -101,25 +98,22 @@ def solr_point_factory(dimension):
                 raise ValueError("point has wrong number of dimensions")
             self.point = tuple(float(v) for v in v_arr)
 
-        # def __repr__(self):
-        #     return "solr_point(%s)" % str(self)
-
         def __repr__(self):
             return ','.join(str(p) for p in self.point)
 
-    return solr_point
+    return SolrPoint
 
 
 class SolrField():
 
-    def __init__(self, name, indexed=None, stored=None, required=False, multiValued=False, dynamic=False, **kwargs):
+    def __init__(self, name, indexed=None, stored=None, required=False, multi_valued=False, dynamic=False, **kwargs):
         self.name = name
         if indexed is not None:
             self.indexed = indexed
         if stored is not None:
             self.stored = stored
         # By default, indexed & stored are taken from the class attribute
-        self.multi_valued = multiValued
+        self.multi_valued = multi_valued
         self.required = required
         self.dynamic = dynamic
         if dynamic:
@@ -255,7 +249,7 @@ class SolrDoubleField(SolrNumericalField):
 class SolrDateField(SolrField):
 
     def normalize(self, v):
-        return solr_date(v)
+        return SolrDate(v)
 
     def to_user_data(self, v):
         return v._dt_obj
@@ -303,7 +297,7 @@ class SolrPoint2Field(SolrPointField):
     dimension = 2
 
 
-def SolrFieldTypeFactory(cls, name, **kwargs):
+def solr_field_type_factory(cls, name, **kwargs):
     atts = {'stored': True, 'indexed': True}
     atts.update(kwargs)
     # This next because otherwise the class names aren't globally
@@ -346,10 +340,10 @@ class SolrFieldInstance():
         return self.field.to_user_data(self.value)
 
     def __eq__(self, other):
-        return (self.field, self.value) == (self.field, self.value)
+        return (self.field, self.value) == (other.field, other.value)
 
     def __lt__(self, other):
-        return (self.field, self.value) < (self.field, self.value)
+        return (self.field, self.value) < (other.field, other.value)
 
     def __hash__(self):
         return hash((self.field, self.value))
@@ -460,7 +454,7 @@ class SolrSchema():
             raise SolrError("Invalid schema.xml: missing %s attribute on fieldType" % e.args[0])
         #Obtain field type for given class. Defaults to generic SolrField.
         field_class = self.solr_data_types.get(class_name, SolrField)
-        return name, SolrFieldTypeFactory(field_class, **self.translate_attributes(field_type_node.attrib))
+        return name, solr_field_type_factory(field_class, **self.translate_attributes(field_type_node.attrib))
 
     def field_factory(self, field_node, field_type_classes, dynamic):
         try:
@@ -569,8 +563,8 @@ class SolrSchema():
 
 
 class SolrUpdate():
-    ADD = E.add
-    DOC = E.doc
+    _ADD = E.add
+    _DOC = E.doc
     FIELD = E.field
 
     def __init__(self, schema, docs):
@@ -589,15 +583,15 @@ class SolrUpdate():
         if missing_fields:
             raise SolrError("These required fields are unspecified:\n %s" % missing_fields)
         if not doc:
-            return self.DOC()
-        return self.DOC(*reduce(operator.add, [self.fields(name, values) for name, values in list(doc.items())]))
+            return self._DOC()
+        return self._DOC(*reduce(operator.add, [self.fields(name, values) for name, values in list(doc.items())]))
 
     def add(self, docs):
         if hasattr(docs, "items") or not isinstance(docs, list):
             # is a dictionary, or anything else except a list
             docs = [docs]
         docs = [(doc if hasattr(doc, "items") else object_to_dict(doc, self.schema)) for doc in docs]
-        return self.ADD(*[self.doc(doc) for doc in docs])
+        return self._ADD(*[self.doc(doc) for doc in docs])
 
     def __repr__(self):
         return lxml.etree.tostring(self.xml, encoding='utf-8').decode('utf8')
@@ -848,7 +842,7 @@ def value_from_node(node):
     elif node.tag in ('float', 'double'):
         value = float(node.text)
     elif node.tag == 'date':
-        value = solr_date(node.text)
+        value = SolrDate(node.text)
     if name is not None:
         return name, value
     return value

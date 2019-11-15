@@ -1,11 +1,15 @@
-import collections, copy, operator, re
-
-from .schema import solr_date, SolrError, SolrBooleanField, SolrUnicodeField, WildcardFieldInstance
-from .walktree import walk, event, leaf, exit
+import collections
+import copy
+import operator
+import re
 from functools import reduce
 
+import sunburnt.walktree
 
-class LuceneQuery(object):
+from .schema import (SolrBooleanField, SolrError, SolrUnicodeField, WildcardFieldInstance, SolrDate)
+
+
+class LuceneQuery():
     default_term_re = re.compile(r'^\w+$')
 
     def __init__(self, schema, option_flag=None, original=None):
@@ -45,39 +49,11 @@ class LuceneQuery(object):
             opts[self.option_flag] = s
         return opts
 
-    def serialize_debug(self, indent=0):
-        indentspace = indent * ' '
-        print('%s%s (%s)' % (indentspace, repr(self), "Normalized" if self.normalized else "Not normalized"))
-        print('%s%s' % (indentspace, '{'))
-        for term in list(self.terms.items()):
-            print('%s%s' % (indentspace, term))
-        for phrase in list(self.phrases.items()):
-            print('%s%s' % (indentspace, phrase))
-        for range in self.ranges:
-            print('%s%s' % (indentspace, range))
-        if self.subqueries:
-            if self._and:
-                print('%sAND:' % indentspace)
-            elif self._or:
-                print('%sOR:' % indentspace)
-            elif self._not:
-                print('%sNOT:' % indentspace)
-            elif self._pow is not False:
-                print('%sPOW %s:' % (indentspace, self._pow))
-            else:
-                raise ValueError
-            for subquery in self.subqueries:
-                subquery.serialize_debug(indent + 2)
-        print('%s%s' % (indentspace, '}'))
-
     # Below, we sort all our value_sets - this is for predictability when testing.
-    def serialize_term_queries(self, terms):
+    @staticmethod
+    def serialize_term_queries(terms):
         s = []
         for name, value_set in list(terms.items()):
-            if name:
-                field = self.schema.match_field(name)
-            else:
-                field = self.schema.default_field
             if name:
                 s += ['%s:%s' % (name, value.to_query()) for value in value_set]
             else:
@@ -105,14 +81,13 @@ class LuceneQuery(object):
     def child_needs_parens(self, child):
         if len(child) == 1:
             return False
-        elif self._or:
+        if self._or:
             return not (child._or or child._pow)
-        elif (self._and or self._not):
+        if (self._and or self._not):
             return not (child._and or child._not or child._pow)
-        elif self._pow is not False:
+        if self._pow is not False:
             return True
-        else:
-            return True
+        return True
 
     def normalize(self):
         # shortcut to avoid re-normalization no-ops
@@ -120,7 +95,8 @@ class LuceneQuery(object):
             return self, False
 
         changed = False
-        for path in walk(self, lambda q: q.subqueries, event(exit | leaf)):
+        for path in sunburnt.walktree.walk(self, lambda q: q.subqueries,
+                                           sunburnt.walktree.event(sunburnt.walktree.exit | sunburnt.walktree.leaf)):
             if len(path) == 1:
                 # last time around, so:
                 break
@@ -177,7 +153,7 @@ class LuceneQuery(object):
                             subqueries=subqueries)
 
         # having recalculated subqueries, there may be the opportunity for further normalization, if we have zero or one subqueries left
-        if not len(obj.subqueries):
+        if not obj.subqueries:
             if obj._not:
                 obj = obj.clone(_not=False, _and=True)
             elif obj._pow:
@@ -204,34 +180,30 @@ class LuceneQuery(object):
             newself = newself | (newself & reduce(operator.or_, boost_queries))
             newself, _ = newself.normalize()
             return newself.serialize_to_unicode(level=level)
-        else:
-            u = [
-                s for s in
-                [self.serialize_term_queries(self.terms),
-                 self.serialize_term_queries(self.phrases),
-                 self.serialize_range_queries()] if s
-            ]
-            for q in self.subqueries:
-                op_ = 'OR' if self._or else 'AND'
-                if self.child_needs_parens(q):
-                    u.append("(%s)" % q.serialize_to_unicode(level=level + 1, op=op_))
-                else:
-                    u.append("%s" % q.serialize_to_unicode(level=level + 1, op=op_))
-            if self._and:
-                return ' AND '.join(u)
-            elif self._or:
-                return ' OR '.join(u)
-            elif self._not:
-                assert len(u) == 1
-                if level == 0 or (level == 1 and op == "AND"):
-                    return 'NOT %s' % u[0]
-                else:
-                    return '(*:* AND NOT %s)' % u[0]
-            elif self._pow is not False:
-                assert len(u) == 1
-                return "%s^%s" % (u[0], self._pow)
+        u = [
+            s for s in [self.serialize_term_queries(self.terms),
+                        self.serialize_term_queries(self.phrases),
+                        self.serialize_range_queries()] if s
+        ]
+        for q in self.subqueries:
+            op_ = 'OR' if self._or else 'AND'
+            if self.child_needs_parens(q):
+                u.append("(%s)" % q.serialize_to_unicode(level=level + 1, op=op_))
             else:
-                raise ValueError
+                u.append("%s" % q.serialize_to_unicode(level=level + 1, op=op_))
+        if self._and:
+            return ' AND '.join(u)
+        if self._or:
+            return ' OR '.join(u)
+        if self._not:
+            assert len(u) == 1
+            if level == 0 or (level == 1 and op == "AND"):
+                return 'NOT %s' % u[0]
+            return '(*:* AND NOT %s)' % u[0]
+        if self._pow is not False:
+            assert len(u) == 1
+            return "%s^%s" % (u[0], self._pow)
+        raise ValueError
 
     def __len__(self):
         # How many terms in this (sub) query?
@@ -330,8 +302,7 @@ class LuceneQuery(object):
             if len(values) == 1 and values[0] == "*":
                 self.terms["*"].add(WildcardFieldInstance.from_user_data())
                 return
-            else:
-                raise SolrError("If field_name is '*', then only '*' is permitted as the query")
+            raise SolrError("If field_name is '*', then only '*' is permitted as the query")
         insts = [field.instance_from_user_data(value) for value in values]
         for inst in insts:
             if isinstance(field, SolrUnicodeField):
@@ -363,7 +334,7 @@ class LuceneQuery(object):
             insts = (field.instance_from_user_data(value),)
         self.ranges.add((field_name, rel, insts))
 
-    def term_or_phrase(self, arg, force=None):
+    def term_or_phrase(self, arg):
         return 'terms' if self.default_term_re.match(arg) else 'phrases'
 
     def add_boost(self, kwargs, boost_score):
@@ -371,7 +342,7 @@ class LuceneQuery(object):
             field = self.schema.match_field(k)
             if not field:
                 raise ValueError("%s is not a valid field name" % k)
-            elif not field.indexed:
+            if not field.indexed:
                 raise SolrError("Can't query on non-indexed field '%s'" % k)
             value = field.instance_from_user_data(v)
         self.boosts.append((kwargs, boost_score))
@@ -384,7 +355,7 @@ class BaseSearch():
 
     result_constructor = dict
 
-    def _init_common_modules(self):
+    def __init__(self, interface=None, original=None):
         self.query_obj = LuceneQuery(self.schema, 'q')
         self.filter_obj = FilterOptions(self.schema)
         self.paginator = PaginateOptions(self.schema)
@@ -602,20 +573,19 @@ class BaseSearch():
                 response.result.docs = response.result.docs[::step]
             return response
 
-        else:
-            # if not a slice, a single result is being requested
-            k = operator.index(k)
+        # if not a slice, a single result is being requested
+        k = operator.index(k)
+        if k < 0:
+            k += self.count()
             if k < 0:
-                k += self.count()
-                if k < 0:
-                    raise IndexError("list index out of range")
-
-            # Otherwise do the query anyway, don't count() to avoid extra Solr call
-            k += offset
-            response = self.paginate(start=k, rows=1).execute()
-            if response.result.numFound < k:
                 raise IndexError("list index out of range")
-            return response.result.docs[0]
+
+        # Otherwise do the query anyway, don't count() to avoid extra Solr call
+        k += offset
+        response = self.paginate(start=k, rows=1).execute()
+        if response.result.numFound < k:
+            raise IndexError("list index out of range")
+        return response.result.docs[0]
 
 
 class SolrSearch(BaseSearch):
@@ -625,7 +595,7 @@ class SolrSearch(BaseSearch):
         self.schema = interface.schema
         if original is None:
             self.more_like_this = MoreLikeThisOptions(self.schema)
-            self._init_common_modules()
+            super().__init__()
         else:
             for opt in self.option_modules:
                 setattr(self, opt, getattr(original, opt).clone())
@@ -656,7 +626,7 @@ class MltSolrSearch(BaseSearch):
             self.content = content
             self.url = url
             self.more_like_this = MoreLikeThisHandlerOptions(self.schema)
-            self._init_common_modules()
+            super().__init__()
         else:
             self.content = original.content
             self.url = original.url
@@ -704,15 +674,16 @@ class MltSolrSearch(BaseSearch):
         return self.transform_result(result, constructor)
 
 
-class Options(object):
+class Options():
 
     def clone(self):
         return self.__class__(self.schema, self)
 
-    def invalid_value(self, msg=""):
+    @staticmethod
+    def invalid_value(msg=""):
         assert False, msg
 
-    def update(self, fields=None, **kwargs):
+    def update(self, fields=None, score=None, **kwargs):
         if fields:
             self.schema.check_fields(fields)
             if isinstance(fields, str):
@@ -760,7 +731,7 @@ class Options(object):
         return opts
 
 
-class FilterOptions(object):
+class FilterOptions():
     """
     This class creates a list of filters, so that we end up with multiple
     fq arguments to Solr.
@@ -784,8 +755,7 @@ class FilterOptions(object):
     def options(self):
         if self.filters:
             return {'fq': [f.options()[None] for f in self.filters]}
-        else:
-            return {}
+        return {}
 
 
 class FacetOptions(Options):
@@ -808,7 +778,8 @@ class FacetOptions(Options):
         else:
             self.fields = copy.copy(original.fields)
 
-    def field_names_in_opts(self, opts, fields):
+    @staticmethod
+    def field_names_in_opts(opts, fields):
         if fields:
             opts["facet.field"] = sorted(fields)
 
@@ -863,29 +834,26 @@ class FacetRangeOptions(Options):
         """
         if isinstance(v, (int, float)):
             return v
-        elif isinstance(v, solr_date):
+        if isinstance(v, SolrDate):
             return str(v)
-        else:
-            return self.invalid_value()
+        return self.invalid_value()
 
     def __validate_range_gap(self, v):
         if isinstance(v, (int, float)):
             return v
-        elif isinstance(v, str):
+        if isinstance(v, str):
             # A string gap must use Lucene syntax:
             # http://lucene.apache.org/solr/4_0_0/solr-core/org/apache/solr/util/DateMathParser.html
             match = self.__class__.lucene_unit_pattern.match(v)
 
             if match is None:
                 return self.invalid_value()
-            elif match.group(3).upper() not in self.__class__.lucene_units:
+            if match.group(3).upper() not in self.__class__.lucene_units:
                 return self.invalid_value()
-
             return v
-        else:
-            return self.invalid_value()
+        return self.invalid_value()
 
-    def update(self, fields=None, **kwargs):
+    def update(self, fields=None, score=None, **kwargs):
         assert isinstance(fields, dict)
         self.fields = dict()
         if fields:
@@ -909,7 +877,7 @@ class FacetRangeOptions(Options):
                 if isinstance(opts["start"], float) and not (isinstance(opts["end"], float) and isinstance(opts["gap"], float)):
                     raise SolrError("Incompatible types for start, end, and gap on '%s'." % field)
 
-                if isinstance(opts["start"], solr_date) and not (isinstance(opts["end"], solr_date) and isinstance(opts["gap"], str)):
+                if isinstance(opts["start"], SolrDate) and not (isinstance(opts["end"], SolrDate) and isinstance(opts["gap"], str)):
                     raise SolrError("Incompatible types for start, end, and gap on '%s'." % field)
 
     def options(self):
@@ -927,7 +895,8 @@ class FacetRangeOptions(Options):
 
         return opts
 
-    def field_names_in_opts(self, opts, fields):
+    @staticmethod
+    def field_names_in_opts(opts, fields):
         if fields:
             opts["facet.range"] = fields
 
@@ -963,7 +932,8 @@ class HighlightOptions(Options):
         else:
             self.fields = copy.copy(original.fields)
 
-    def field_names_in_opts(self, opts, fields):
+    @staticmethod
+    def field_names_in_opts(opts, fields):
         if fields:
             opts["hl.fl"] = ",".join(sorted(fields))
 
@@ -1119,17 +1089,16 @@ class SortOptions(Options):
             f = self.schema.match_field(field)
             if not f:
                 raise SolrError("No such field %s" % field)
-            elif f.multi_valued:
+            if f.multi_valued:
                 raise SolrError("Cannot sort on a multivalued field")
-            elif not f.indexed:
+            if not f.indexed:
                 raise SolrError("Cannot sort on an un-indexed field")
         self.fields.append([order, field])
 
     def options(self):
         if self.fields:
             return {"sort": ", ".join("%s %s" % (field, order) for order, field in self.fields)}
-        else:
-            return {}
+        return {}
 
 
 class FieldLimitOptions(Options):
@@ -1184,8 +1153,7 @@ class FacetQueryOptions(Options):
     def options(self):
         if self.queries:
             return {'facet.query': [str(q) for q in self.queries], 'facet': True}
-        else:
-            return {}
+        return {}
 
 
 class ExtraOptions(Options):
