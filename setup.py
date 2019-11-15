@@ -21,6 +21,7 @@ distutils.core.setup(name='sunburnt-python3',
                      url='https://github.com/christopher-im/sunburnt-python3',
                      packages=setuptools.find_packages(),
                      requires=['lxml', 'pytz', 'requests'],
+                     licence='MIT',
                      classifiers=[
                          'Development Status :: 4 - Beta', 'Programming Language :: Python :: 3', 'Intended Audience :: Developers',
                          'License :: OSI Approved :: MIT License', 'Programming Language :: Python',

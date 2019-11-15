@@ -11,3 +11,4 @@ venv
 xunit-reports
 .scannerwork
 coverage-reports
+*egg-info
